@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A sample template to automate the bootstraping the node in chef server 
+
+Resources:
+  MyEC2Instance:
+    Type: "AWS::EC2::Instance"
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            "/etc/chef/client.rb":
+                source: "http://bucket_name.s3.amazonaws.com/client.rb"
+            "/etc/chef/organization-validator.pem":
+                source: "http://bucket_name.s3.amazonaws.com/organization-validator.pem"
+          commands:
+            test1:
+              command: sudo chef-client -i 10
+
+    Properties:
+      SecurityGroups:
+      - !Ref InstanceSecurityGroup
+      ImageId: "ami-da05a4a0"
+      InstanceType: t2.micro
+      KeyName: keyes
+      IamInstanceProfile: !Ref InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          curl -L https://www.opscode.com/chef/install.sh | sudo bash
+          chef-client -v
+          mkdir /etc/chef
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v -s ${AWS::StackName} -r MyEC2Instance --region ${AWS::Region}
+
+  RootRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: ["sts:AssumeRole"]
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+      Path: "/"
+      Policies:
+      - PolicyDocument:
+          Statement:
+            - Effect: "Allow"
+              Action: "*"
+              Resource : "*"
+          Version: '2012-10-17'
+        PolicyName: root
+
+  InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        -
+          Ref: "RootRole"
+
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
