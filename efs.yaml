@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This template is used to launch a amazon EC2 Instance which is having EFS Mount to it
+Parameters:
+  VPC:
+    Description: Vpc Id
+    Type: AWS::EC2::VPC::Id
+    Default:  "vpc-id"
+Mappings:
+  RegionMap:
+    us-east-1:
+      "32": "ami-8c1be5f6"
+    us-east-2:
+      "32": "ami-c5062ba0"
+    us-west-1:
+      "32": "ami-02eada62"
+    us-west-2:
+      "32": "ami-e689729e"
+    eu-west-1:
+      "32": "ami-acd005d5"
+    eu-west-2:
+       "32": "ami-1a7f6d7e"
+    ap-southeast-1:
+      "32": "ami-0797ea64"
+    ap-southeast-2:
+       "32": "ami-8536d6e7"
+    ap-northeast-1:
+      "32": "ami-2a69be4c"
+    ap-northeast-2:
+       "32": "ami-9bec36f5"
+    ap-south-1:
+      "32": "ami-4fc58420"
+    eu-central-1:
+       "32": "ami-c7ee5ca8"
+    ca-central-1:
+       "32": "ami-fd55ec99"
+    sa-east-1:
+      "32": "ami-f1344b9d"
+
+Resources:
+  FileSystemEFS:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      FileSystemTags:
+        - Key: Name
+          Value: EFS1
+      PerformanceMode: generalPurpose
+
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystemEFS
+      SubnetId: "subnet-id"
+      SecurityGroups:
+        - Ref: SecurityGroup
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 2049
+        ToPort: 2049
+        CidrIp: 0.0.0.0/0
+
+  MyInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: MountTarget
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", '32']
+      InstanceType: t2.micro
+      KeyName:  pemkeyes
+      SecurityGroupIds:
+        - Ref: SecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum update -y
+          sudo yum install -y nfs-utils
+          sudo mkdir efs
+          sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 ${FileSystemEFS}.ef${AWS::Region}.amazonaws.com:/ ~/efs
+          cd ~/efs
+          echo "${FileSystemEFS}.efs.${AWS::Region}.amazonaws.com" > test.txt
